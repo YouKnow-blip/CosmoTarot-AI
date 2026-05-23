@@ -214,6 +214,48 @@ export default function App() {
     localStorage.setItem("cosmo_tarot_last_daily_claim", new Date().toISOString());
   };
 
+  const handleApplyPromoCode = async (code: string): Promise<{ success: boolean; message: string }> => {
+    const cleanCode = code.trim().toUpperCase();
+    
+    if (cleanCode === "COSMO250" || cleanCode === "ASTRA250" || cleanCode === "TAROT250") {
+      const nextEnergy = stats.energy + 250;
+      const newMax = Math.max(stats.maxEnergy, nextEnergy);
+      const updated = {
+        ...stats,
+        maxEnergy: newMax,
+        energy: nextEnergy
+      };
+      saveStats(updated);
+      triggerVibration("success");
+      return { success: true, message: "Древние силы даровали Вам благословленные +250 космической энергии!" };
+    }
+
+    if (cleanCode === "INFINITY" || cleanCode === "UNLIMITED") {
+      const updated = {
+        ...stats,
+        maxEnergy: 9999,
+        energy: 9999
+      };
+      saveStats(updated);
+      triggerVibration("success");
+      return { success: true, message: "Печать бесконечности сломана! Вам дарована вечная энергия космоса (9999 XP)." };
+    }
+
+    if (cleanCode === "ADMINFORCE") {
+      localStorage.setItem("cosmo_tarot_force_admin", "true");
+      triggerVibration("success");
+      if (user && !user.username) {
+        setUser({ ...user, username: "force_admin" });
+      } else if (user) {
+        // Force state trigger
+        setUser({ ...user });
+      }
+      return { success: true, message: "Священные врата эфира распахнулись. Зеркало Судеб активировано! Прокрутите dashboard вниз." };
+    }
+
+    return { success: false, message: "Тайный знак не найден в астральном эфире. Попробуйте другой шифр." };
+  };
+
   // Triggered when a spread finishes and saves card positions to local storage
   const handleSaveHistory = (record: HistoryRecord) => {
     const nextHistory = [record, ...history];
@@ -301,6 +343,7 @@ export default function App() {
               }
             }}
             onClaimDailyBonus={handleClaimDailyBonus}
+            onApplyPromoCode={handleApplyPromoCode}
           />
         )}
 

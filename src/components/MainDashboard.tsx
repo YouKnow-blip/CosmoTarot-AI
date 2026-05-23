@@ -1,5 +1,5 @@
-import React from "react";
-import { Sparkles, Calendar, Layers, Heart, User, History, Zap } from "lucide-react";
+import React, { useState } from "react";
+import { Sparkles, Calendar, Layers, Heart, User, History, Zap, Ticket, Gift } from "lucide-react";
 import { TelegramUser, UserStats } from "../types";
 import { triggerVibration } from "../utils/magicEffects";
 
@@ -10,6 +10,7 @@ interface MainDashboardProps {
   isPremium: boolean;
   onClaimDailyBonus: () => void;
   dailyClaimed: boolean;
+  onApplyPromoCode: (code: string) => Promise<{ success: boolean; message: string }>;
 }
 
 export default function MainDashboard({
@@ -18,8 +19,36 @@ export default function MainDashboard({
   onNavigate,
   isPremium,
   onClaimDailyBonus,
-  dailyClaimed
+  dailyClaimed,
+  onApplyPromoCode
 }: MainDashboardProps) {
+
+  const [promoCode, setPromoCode] = useState("");
+  const [promoMessage, setPromoMessage] = useState<{ success: boolean; text: string } | null>(null);
+  const [isSubmittingPromo, setIsSubmittingPromo] = useState(false);
+
+  const handleApplyPromo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!promoCode.trim()) return;
+
+    triggerVibration("medium");
+    setIsSubmittingPromo(true);
+    setPromoMessage(null);
+
+    try {
+      const res = await onApplyPromoCode(promoCode.trim());
+      if (res.success) {
+        setPromoMessage({ success: true, text: res.message });
+        setPromoCode("");
+      } else {
+        setPromoMessage({ success: false, text: res.message });
+      }
+    } catch (err: any) {
+      setPromoMessage({ success: false, text: "Сбой сети при активации таинства." });
+    } finally {
+      setIsSubmittingPromo(false);
+    }
+  };
 
   const handleCardClick = (target: "dashboard" | "spreads" | "compatibility" | "profile" | "history" | "one_card" | "admin") => {
     triggerVibration("medium");
@@ -241,6 +270,48 @@ export default function MainDashboard({
         >
           {dailyClaimed ? "Получено" : "Получить"}
         </button>
+      </div>
+
+      {/* Promo Code redemption panel */}
+      <div className="relative overflow-hidden bg-[#0d041a]/40 border border-[#ffd700]/15 rounded-2xl p-4 flex flex-col gap-2 text-left">
+        <div className="flex items-center gap-1.5 justify-start">
+          <Ticket className="w-3.5 h-3.5 text-[#ffd700]" />
+          <span className="text-xs font-serif font-semibold text-[#ffd700]">🔮 Активация тайного знака</span>
+        </div>
+        <p className="text-[10px] text-[#e0d8cf]/70 font-serif font-light leading-relaxed">
+          Введи священный промокод из скрытых каналов для активации благословенной энергии или статуса.
+        </p>
+        <form onSubmit={handleApplyPromo} className="flex gap-2 mt-1">
+          <input
+            type="text"
+            value={promoCode}
+            onChange={(e) => setPromoCode(e.target.value)}
+            disabled={isSubmittingPromo}
+            placeholder="COSMO250..."
+            className="grow bg-[#050208]/60 border border-[#ffd700]/25 rounded-lg px-2.5 py-1.5 text-xs text-[#ffd700] uppercase tracking-wider placeholder-gray-600 focus:outline-none focus:border-[#ffd700]/50 font-mono"
+            style={{ textTransform: "uppercase" }}
+          />
+          <button
+            type="submit"
+            disabled={isSubmittingPromo || !promoCode.trim()}
+            className={`px-3 py-1.5 text-[10px] font-serif font-semibold rounded-lg shrink-0 transition-all ${
+              isSubmittingPromo || !promoCode.trim()
+                ? "bg-slate-800 text-gray-500 cursor-not-allowed"
+                : "bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-bold shadow-[0_0_12px_rgba(245,158,11,0.25)] active:scale-95 animate-pulse"
+            }`}
+          >
+            {isSubmittingPromo ? "..." : "Ввести"}
+          </button>
+        </form>
+        {promoMessage && (
+          <p className={`text-[9px] font-serif font-medium mt-1 p-1 rounded ${
+            promoMessage.success 
+              ? "bg-[#ffd700]/10 text-[#ffd700] border border-[#ffd700]/20" 
+              : "bg-red-950/20 text-red-400 border border-red-950/45"
+          }`}>
+            {promoMessage.success ? "✨ " : "❌ "} {promoMessage.text}
+          </p>
+        )}
       </div>
 
       {/* Styled Footer for beautiful layout */}

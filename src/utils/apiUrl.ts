@@ -17,7 +17,7 @@ export function getApiUrl(path: string): string {
   }
 
   // Deployed Cloud Run container URL as fallback
-  const fallbackBackend = "https://ais-dev-eoiikp2nxekhxnce2yr25y-199260145316.europe-west1.run.app";
+  const fallbackBackend = "https://ais-pre-eoiikp2nxekhxnce2yr25y-199260145316.europe-west1.run.app";
 
   if (isVercel) {
     return `${fallbackBackend}${path}`;
@@ -42,7 +42,7 @@ export function getActiveApiBaseUrl(): string {
       !window.location.hostname.endsWith(".run.app"));
 
   if (isVercel) {
-    return "https://ais-dev-eoiikp2nxekhxnce2yr25y-199260145316.europe-west1.run.app";
+    return "https://ais-pre-eoiikp2nxekhxnce2yr25y-199260145316.europe-west1.run.app";
   }
   
   return window.location.origin;
