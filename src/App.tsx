@@ -3,6 +3,7 @@ import { Sparkles, Activity, Award } from "lucide-react";
 import { TelegramUser, UserStats, HistoryRecord, SpreadConfig } from "./types";
 import { getTelegramUser, getTelegramWebApp, triggerVibration, playMagicalChime } from "./utils/magicEffects";
 import { SPREADS_CONFIG } from "./data/tarotData";
+import { getApiUrl } from "./utils/apiUrl";
 
 // Components imports
 import MagicalBackground from "./components/MagicalBackground";
@@ -130,7 +131,7 @@ export default function App() {
       const usernameVal = (targetUser?.username || "").trim().toLowerCase().replace(/^@/, "");
       if (!usernameVal || usernameVal === "anonymous") return;
 
-      const resp = await fetch("/api/sync-stats", {
+      const resp = await fetch(getApiUrl("/api/sync-stats"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user: targetUser, stats: targetStats, isPremium: premium })

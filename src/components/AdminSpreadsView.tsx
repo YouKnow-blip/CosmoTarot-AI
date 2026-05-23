@@ -4,6 +4,7 @@ import { TelegramUser, SpreadConfig } from "../types";
 import { TAROT_CARDS } from "../data/tarotData";
 import { triggerVibration } from "../utils/magicEffects";
 import TarotCardGraphic from "./TarotCardGraphic";
+import { getApiUrl, getActiveApiBaseUrl } from "../utils/apiUrl";
 
 interface SavedSpread {
   id: string;
@@ -52,6 +53,7 @@ export default function AdminSpreadsView({ user, onBack }: AdminSpreadsViewProps
   // Custom manual energy value field states
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [customEnergyValue, setCustomEnergyValue] = useState("");
+  const [apiOverride, setApiOverride] = useState(localStorage.getItem("cosmo_tarot_api_override") || "");
 
   const cleanUsername = (user.username || "").trim().toLowerCase().replace(/^@/, "");
   const isAdmin = cleanUsername === "youknowskii";
@@ -63,7 +65,7 @@ export default function AdminSpreadsView({ user, onBack }: AdminSpreadsViewProps
     triggerVibration("light");
 
     try {
-      const resp = await fetch(`/api/admin/all-spreads?username=${encodeURIComponent(user.username || "")}`);
+      const resp = await fetch(getApiUrl(`/api/admin/all-spreads?username=${encodeURIComponent(user.username || "")}`));
       if (!resp.ok) {
         let serverError = "";
         try {
@@ -97,7 +99,7 @@ export default function AdminSpreadsView({ user, onBack }: AdminSpreadsViewProps
     triggerVibration("light");
 
     try {
-      const resp = await fetch(`/api/admin/all-users?username=${encodeURIComponent(user.username || "")}`);
+      const resp = await fetch(getApiUrl(`/api/admin/all-users?username=${encodeURIComponent(user.username || "")}`));
       if (!resp.ok) {
         let serverError = "";
         try {
@@ -141,7 +143,7 @@ export default function AdminSpreadsView({ user, onBack }: AdminSpreadsViewProps
   const handleModifyUser = async (targetUserKey: string, payload: { energy?: number; isPremium?: boolean; maxEnergy?: number }) => {
     triggerVibration("medium");
     try {
-      const resp = await fetch("/api/admin/modify-user", {
+      const resp = await fetch(getApiUrl("/api/admin/modify-user"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -624,6 +626,53 @@ export default function AdminSpreadsView({ user, onBack }: AdminSpreadsViewProps
           </div>
         )
       )}
+
+      {/* 5. API Bridge settings (Astra Bridge) */}
+      <div className="bg-[#0d041a]/60 backdrop-blur-md rounded-2xl border border-[#ffd700]/15 p-4 flex flex-col gap-3 text-left shadow-[0_0_25px_rgba(188,19,254,0.06)] mt-2">
+        <h3 className="text-xs font-serif font-semibold text-[#ffd700] uppercase tracking-wider flex items-center gap-1.5 leading-none">
+          <Sparkles className="w-3.5 h-3.5 text-[#ffd700] animate-pulse" /> Настройка Астрального Моста API (Vercel)
+        </h3>
+        <p className="text-[10px] text-[#e0d8cf]/70 font-serif leading-relaxed">
+          Чтобы данные (расклады, пользователи, энергия) на Vercel синхронизировались в реальном времени, укажите адрес Вашего Cloud Run приложения (Development App URL):
+        </p>
+        <div className="flex gap-1.5">
+          <input
+            type="text"
+            value={apiOverride}
+            onChange={(e) => setApiOverride(e.target.value)}
+            placeholder="https://ais-...-199260145316.europe-west1.run.app"
+            className="grow bg-[#050208]/80 border border-[#ffd700]/20 rounded-xl px-3 py-2 text-xs text-[#e0d8cf] placeholder-gray-600 focus:outline-none focus:border-[#ffd700]/50 font-mono"
+          />
+          <button
+            onClick={() => {
+              if (apiOverride.trim()) {
+                localStorage.setItem("cosmo_tarot_api_override", apiOverride.trim());
+                alert("Адрес астрального моста успешно сохранен! Перезагрузка эфира...");
+                window.location.reload();
+              } else {
+                alert("Укажите корректный URL адрес.");
+              }
+            }}
+            className="px-3 bg-gradient-to-r from-[#ffd700] to-amber-500 hover:from-yellow-400 hover:to-amber-500 text-slate-950 font-serif font-semibold text-xs rounded-xl active:scale-95 transition-all flex items-center shrink-0"
+          >
+            Сохранить
+          </button>
+        </div>
+        <div className="flex justify-between items-center text-[9.5px] font-mono mt-0.5 text-[#e0d8cf]/50">
+          <span className="truncate max-w-[200px]" title={getActiveApiBaseUrl()}>Активный: {getActiveApiBaseUrl()}</span>
+          <button
+            onClick={() => {
+              localStorage.removeItem("cosmo_tarot_api_override");
+              setApiOverride("");
+              alert("Астральный мост сброшен на стандартное значение.");
+              window.location.reload();
+            }}
+            className="text-[#ffd700] hover:text-white border-b border-dashed border-[#ffd700]/30 transition"
+          >
+            Сбросить на авто
+          </button>
+        </div>
+      </div>
 
     </div>
   );

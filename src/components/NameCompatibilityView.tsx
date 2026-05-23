@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { ArrowLeft, Heart, Sparkles, RefreshCw, Star, Compass } from "lucide-react";
 import { triggerVibration, playFlipSound, playMagicalChime, playCelestialSuccessSound } from "../utils/magicEffects";
 import { CompatibilityResult } from "../types";
+import { getApiUrl } from "../utils/apiUrl";
 
 interface NameCompatibilityViewProps {
   onBack: () => void;
@@ -130,7 +131,7 @@ export default function NameCompatibilityView({
     triggerVibration("medium");
 
     try {
-      const response = await fetch("/api/compatibility-reading", {
+      const response = await fetch(getApiUrl("/api/compatibility-reading"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

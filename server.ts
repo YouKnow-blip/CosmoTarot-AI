@@ -14,6 +14,18 @@ async function startServer() {
   // JSON Body parser
   app.use(express.json());
 
+  // CORS middleware for external hosting (e.g. Vercel)
+  app.use((req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, PATCH, DELETE");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    if (req.method === "OPTIONS") {
+      res.sendStatus(200);
+      return;
+    }
+    next();
+  });
+
   // SavedSpread interface and DB persistence setup
   interface SavedSpread {
     id: string;

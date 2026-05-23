@@ -4,6 +4,7 @@ import { SpreadConfig, TarotCard, HistoryRecord, TelegramUser } from "../types";
 import { TAROT_CARDS } from "../data/tarotData";
 import { triggerVibration, playFlipSound, playMagicalChime, playCelestialSuccessSound } from "../utils/magicEffects";
 import TarotCardGraphic from "./TarotCardGraphic";
+import { getApiUrl } from "../utils/apiUrl";
 
 interface SpreadResultViewProps {
   spread: SpreadConfig;
@@ -46,7 +47,7 @@ export default function SpreadResultView({
 
   // Helper to save current cards layout to server db
   const saveSpreadToBackend = (recId: string, cardsList: DrawnCardInstance[]) => {
-    fetch("/api/save-reading", {
+    fetch(getApiUrl("/api/save-reading"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -207,7 +208,7 @@ export default function SpreadResultView({
     triggerVibration("medium");
 
     try {
-      const response = await fetch("/api/tarot-reading", {
+      const response = await fetch(getApiUrl("/api/tarot-reading"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -236,7 +237,7 @@ export default function SpreadResultView({
 
       // Trigger server update with reading Text
       if (sessionRecordId) {
-        fetch("/api/save-reading", {
+        fetch(getApiUrl("/api/save-reading"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
