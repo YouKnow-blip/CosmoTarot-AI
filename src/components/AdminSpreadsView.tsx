@@ -633,25 +633,50 @@ export default function AdminSpreadsView({ user, onBack }: AdminSpreadsViewProps
           <Sparkles className="w-3.5 h-3.5 text-[#ffd700] animate-pulse" /> Настройка Астрального Моста API (Vercel)
         </h3>
         <p className="text-[10px] text-[#e0d8cf]/70 font-serif leading-relaxed">
-          Чтобы данные (расклады, пользователи, энергия) на Vercel синхронизировались в реальном времени, укажите адрес Вашего Cloud Run приложения (Development App URL):
+          Чтобы данные (расклады, пользователи, энергия) на Vercel синхронизировались в реальном времени, укажите адрес Вашего Cloud Run приложения (сервера API):
+        </p>
+        <div className="bg-[#050208]/85 border border-[#ffd700]/10 rounded-xl p-2 text-[10px] text-[#ffd700]/90 font-mono select-all flex justify-between items-center gap-1.5 break-all">
+          <span className="truncate">https://ais-dev-eoiikp2nxekhxnce2yr25y-199260145316.europe-west1.run.app</span>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText("https://ais-dev-eoiikp2nxekhxnce2yr25y-199260145316.europe-west1.run.app");
+              triggerVibration("success");
+              alert("Адрес сервера скопирован в буфер обмена!");
+            }}
+            className="text-[9px] px-2 py-0.5 border border-[#ffd700]/30 rounded text-white bg-yellow-950/25 hover:bg-yellow-950/40 shrink-0 font-sans cursor-pointer active:scale-95 transition"
+          >
+            Скопировать
+          </button>
+        </div>
+        <p className="text-[9px] text-rose-300 font-serif leading-none italic">
+          ⚠️ Важно: Не вставляйте сюда ссылку на Telegram-бота или WebApp! Нужна только скопированная выше ссылка сервера.
         </p>
         <div className="flex gap-1.5">
           <input
             type="text"
             value={apiOverride}
             onChange={(e) => setApiOverride(e.target.value)}
-            placeholder="https://ais-...-199260145316.europe-west1.run.app"
+            placeholder="Вставьте скопированный адрес сервера сюда"
             className="grow bg-[#050208]/80 border border-[#ffd700]/20 rounded-xl px-3 py-2 text-xs text-[#e0d8cf] placeholder-gray-600 focus:outline-none focus:border-[#ffd700]/50 font-mono"
           />
           <button
             onClick={() => {
-              if (apiOverride.trim()) {
-                localStorage.setItem("cosmo_tarot_api_override", apiOverride.trim());
-                alert("Адрес астрального моста успешно сохранен! Перезагрузка эфира...");
-                window.location.reload();
-              } else {
+              const cleaned = apiOverride.trim();
+              if (!cleaned) {
                 alert("Укажите корректный URL адрес.");
+                return;
               }
+              if (cleaned.includes("t.me") || cleaned.includes("telegram")) {
+                alert("Ошибка: Вы вставили ссылку на Telegram-бота/канал!\n\nСюда нужно вставить адрес сервера базы данных (скопируйте его кнопкой выше и вставьте).");
+                return;
+              }
+              if (!cleaned.startsWith("http://") && !cleaned.startsWith("https://")) {
+                alert("Ошибка: Адрес сервера должен начинаться с https:// или http://");
+                return;
+              }
+              localStorage.setItem("cosmo_tarot_api_override", cleaned);
+              alert("Астральный мост успешно сохранен! Перезагрузка эфира...");
+              window.location.reload();
             }}
             className="px-3 bg-gradient-to-r from-[#ffd700] to-amber-500 hover:from-yellow-400 hover:to-amber-500 text-slate-950 font-serif font-semibold text-xs rounded-xl active:scale-95 transition-all flex items-center shrink-0"
           >
