@@ -12,11 +12,12 @@ import SpreadResultView from "./components/SpreadResultView";
 import NameCompatibilityView from "./components/NameCompatibilityView";
 import ProfileView from "./components/ProfileView";
 import HistoryView from "./components/HistoryView";
+import AdminSpreadsView from "./components/AdminSpreadsView";
 
 export default function App() {
   
   // 1. Core States
-  const [activeView, setActiveView] = useState<"dashboard" | "spreads" | "compatibility" | "profile" | "history" | "one_card">("dashboard");
+  const [activeView, setActiveView] = useState<"dashboard" | "spreads" | "compatibility" | "profile" | "history" | "one_card" | "admin">("dashboard");
   const [user, setUser] = useState<TelegramUser>(getTelegramUser());
   const [isPremium, setIsPremium] = useState<boolean>(false);
   
@@ -279,6 +280,7 @@ export default function App() {
             userEnergy={stats.energy}
             onConsumeEnergy={handleConsumeEnergy}
             onSaveHistory={handleSaveHistory}
+            user={user}
             onBack={() => {
               setSelectedSpread(null);
               setActiveView("dashboard");
@@ -312,6 +314,14 @@ export default function App() {
           <HistoryView
             history={history}
             onClearHistory={handleClearHistory}
+            onBack={() => setActiveView("dashboard")}
+          />
+        )}
+
+        {/* VIEW 7: ADMIN CHANNELS PANEL */}
+        {activeView === "admin" && (
+          <AdminSpreadsView
+            user={user}
             onBack={() => setActiveView("dashboard")}
           />
         )}

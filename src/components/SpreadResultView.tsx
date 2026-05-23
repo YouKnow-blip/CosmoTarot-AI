@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Sparkles, ArrowLeft, RefreshCw, Zap, Stars, HelpCircle, FileText } from "lucide-react";
-import { SpreadConfig, TarotCard, HistoryRecord } from "../types";
+import { SpreadConfig, TarotCard, HistoryRecord, TelegramUser } from "../types";
 import { TAROT_CARDS } from "../data/tarotData";
 import { triggerVibration, playFlipSound, playMagicalChime, playCelestialSuccessSound } from "../utils/magicEffects";
 import TarotCardGraphic from "./TarotCardGraphic";
@@ -11,6 +11,7 @@ interface SpreadResultViewProps {
   onSaveHistory: (record: HistoryRecord) => void;
   onConsumeEnergy: (amount: number) => void;
   userEnergy: number;
+  user: TelegramUser;
 }
 
 interface DrawnCardInstance {
@@ -25,12 +26,14 @@ export default function SpreadResultView({
   onBack,
   onSaveHistory,
   onConsumeEnergy,
-  userEnergy
+  userEnergy,
+  user
 }: SpreadResultViewProps) {
 
   const [step, setStep] = useState<"ready" | "shuffling" | "drawing" | "reading">("ready");
   
   // App state variables
+  const [sessionRecordId, setSessionRecordId] = useState<string>("");
   const [shufflingCount, setShufflingCount] = useState(0);
   const [drawnCards, setDrawnCards] = useState<DrawnCardInstance[]>([]);
   const [activeDrawIndex, setActiveDrawIndex] = useState(0);
@@ -40,6 +43,26 @@ export default function SpreadResultView({
   const [aiReading, setAiReading] = useState<string>("");
   const [loadingAi, setLoadingAi] = useState(false);
   const [errorAi, setErrorAi] = useState("");
+
+  // Helper to save current cards layout to server db
+  const saveSpreadToBackend = (recId: string, cardsList: DrawnCardInstance[]) => {
+    fetch("/api/save-reading", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: recId,
+        user: user,
+        spreadName: spread.name,
+        userQuestion: userQuestion,
+        selectedCards: cardsList.map(c => ({
+          nameRu: c.card.nameRu,
+          nameEn: c.card.nameEn,
+          isReversed: c.isReversed,
+          positionName: c.positionName
+        }))
+      })
+    }).catch(err => console.error("Error saving reading to database:", err));
+  };
 
   // Clean initialization or restart of spread
   const handleStartSession = () => {
@@ -53,6 +76,10 @@ export default function SpreadResultView({
     // Spend energy point costs on start
     onConsumeEnergy(spread.energyCost);
     
+    // Generate static session record ID
+    const recId = `tarot_draw_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    setSessionRecordId(recId);
+
     // Switch to active shuffling stage
     setStep("shuffling");
     setShufflingCount(0);
@@ -117,9 +144,14 @@ export default function SpreadResultView({
       triggerVibration("success");
       playCelestialSuccessSound();
       
+      const targetId = sessionRecordId || `tarot_draw_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+      if (!sessionRecordId) {
+        setSessionRecordId(targetId);
+      }
+
       // Auto save record of layout inside local storage
       const record: HistoryRecord = {
-        id: `tarot_draw_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        id: targetId,
         date: new Date().toISOString(),
         spreadType: spread.id,
         spreadName: spread.name,
@@ -132,6 +164,9 @@ export default function SpreadResultView({
       
       // Save it using prop
       onSaveHistory(record);
+
+      // Save to server database
+      saveSpreadToBackend(targetId, updated);
     }
   };
 
@@ -143,8 +178,13 @@ export default function SpreadResultView({
     triggerVibration("success");
     playCelestialSuccessSound();
 
+    const targetId = sessionRecordId || `tarot_draw_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    if (!sessionRecordId) {
+      setSessionRecordId(targetId);
+    }
+
     const record: HistoryRecord = {
-      id: `tarot_draw_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      id: targetId,
       date: new Date().toISOString(),
       spreadType: spread.id,
       spreadName: spread.name,
@@ -155,6 +195,9 @@ export default function SpreadResultView({
       }))
     };
     onSaveHistory(record);
+
+    // Save to server database
+    saveSpreadToBackend(targetId, updated);
   };
 
   // Call Gemini AI on Express server for Tarot Reading
@@ -190,6 +233,19 @@ export default function SpreadResultView({
       setAiReading(data.reading || "Оракул ушел в глубокое молчание.");
       triggerVibration("success");
       playCelestialSuccessSound();
+
+      // Trigger server update with reading Text
+      if (sessionRecordId) {
+        fetch("/api/save-reading", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: sessionRecordId,
+            user: user,
+            readingText: data.reading
+          })
+        }).catch(err => console.error("Error updating AI reading text to database:", err));
+      }
     } catch (e: any) {
       console.error(e);
       setErrorAi(e.message || "Ошибка подключения к астральной сети.");

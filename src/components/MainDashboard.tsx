@@ -6,7 +6,7 @@ import { triggerVibration } from "../utils/magicEffects";
 interface MainDashboardProps {
   user: TelegramUser;
   stats: UserStats;
-  onNavigate: (view: "dashboard" | "spreads" | "compatibility" | "profile" | "history" | "one_card") => void;
+  onNavigate: (view: "dashboard" | "spreads" | "compatibility" | "profile" | "history" | "one_card" | "admin") => void;
   isPremium: boolean;
   onClaimDailyBonus: () => void;
   dailyClaimed: boolean;
@@ -21,9 +21,15 @@ export default function MainDashboard({
   dailyClaimed
 }: MainDashboardProps) {
 
-  const handleCardClick = (target: "dashboard" | "spreads" | "compatibility" | "profile" | "history" | "one_card") => {
+  const handleCardClick = (target: "dashboard" | "spreads" | "compatibility" | "profile" | "history" | "one_card" | "admin") => {
     triggerVibration("medium");
     onNavigate(target);
+  };
+
+  const isUserAdmin = (username?: string) => {
+    if (!username) return false;
+    const clean = username.trim().toLowerCase().replace(/^@/, "");
+    return clean === "youknowskii";
   };
 
   const percentEnergy = (stats.energy / stats.maxEnergy) * 100;
@@ -197,6 +203,26 @@ export default function MainDashboard({
           </div>
         </div>
       </div>
+
+      {/* 4. Admin Mirror of Destinies gate */}
+      {isUserAdmin(user.username) && (
+        <div 
+          onClick={() => handleCardClick("admin")}
+          className="group relative overflow-hidden bg-gradient-to-r from-[#ffd700]/10 via-[#bc13fe]/10 to-indigo-950/25 border border-dashed border-[#ffd700]/40 rounded-2xl p-4.5 flex items-center justify-between gap-3 text-left cursor-pointer hover:border-[#ffd700] hover:shadow-[0_0_25px_rgba(255,215,0,0.15)] transition-all duration-300 active:scale-[0.98]"
+        >
+          <div className="flex flex-col">
+            <span className="text-xs font-serif font-semibold text-[#ffd700] uppercase tracking-wider flex items-center gap-1.5 animate-pulse">
+              🔮 ЗЕРКАЛО СУДЕБ (Админ)
+            </span>
+            <p className="text-[10px] text-[#e0d8cf]/80 mt-1 max-w-[245px] font-serif font-light leading-relaxed">
+              Вам доступно вещание из священного эфира. Коснитесь, чтобы созерцать абсолютно все чужие сеансы и предсказания.
+            </p>
+          </div>
+          <div className="p-2.5 bg-[#ffd700]/10 border border-[#ffd700]/30 rounded-xl group-hover:scale-110 transition-transform duration-300 text-[#ffd700]">
+            <Sparkles className="w-4 h-4" />
+          </div>
+        </div>
+      )}
 
       {/* Daily energy claims panel */}
       <div className="relative overflow-hidden bg-[#0d041a]/40 border border-[#ffd700]/15 rounded-2xl p-4 flex items-center justify-between gap-3 text-left">

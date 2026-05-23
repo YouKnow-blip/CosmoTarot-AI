@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 import path from "path";
+import fs from "fs";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
@@ -12,6 +13,89 @@ async function startServer() {
 
   // JSON Body parser
   app.use(express.json());
+
+  // SavedSpread interface and DB persistence setup
+  interface SavedSpread {
+    id: string;
+    username: string;
+    firstName: string;
+    spreadName: string;
+    userQuestion?: string;
+    selectedCards: any[];
+    readingText?: string;
+    timestamp: string;
+  }
+
+  const HISTORY_FILE = path.join(process.cwd(), "spreads_history.json");
+
+  function loadSpreads(): SavedSpread[] {
+    try {
+      if (fs.existsSync(HISTORY_FILE)) {
+        const data = fs.readFileSync(HISTORY_FILE, "utf-8");
+        return JSON.parse(data);
+      }
+    } catch (e) {
+      console.error("Error loading spreads file:", e);
+    }
+    return [];
+  }
+
+  function saveSpreads(spreads: SavedSpread[]) {
+    try {
+      fs.writeFileSync(HISTORY_FILE, JSON.stringify(spreads, null, 2), "utf-8");
+    } catch (e) {
+      console.error("Error saving spreads file:", e);
+    }
+  }
+
+  // API Endpoint 0.1: Save or Update user spread
+  app.post("/api/save-reading", (req: Request, res: Response) => {
+    try {
+      const { id, user, spreadName, userQuestion, selectedCards, readingText } = req.body;
+      const spreads = loadSpreads();
+      
+      const existingIndex = spreads.findIndex((s: any) => s.id === id);
+      const timestamp = new Date().toISOString();
+      const usernameVal = user?.username || "anonymous";
+      const firstNameVal = user?.firstName || "Гость";
+
+      if (existingIndex > -1) {
+        spreads[existingIndex] = {
+          ...spreads[existingIndex],
+          readingText: readingText !== undefined ? readingText : spreads[existingIndex].readingText,
+          userQuestion: userQuestion !== undefined ? userQuestion : spreads[existingIndex].userQuestion,
+        };
+      } else {
+        spreads.unshift({
+          id: id || `spread_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          username: usernameVal,
+          firstName: firstNameVal,
+          spreadName: spreadName || "Расклад",
+          userQuestion: userQuestion || "",
+          selectedCards: selectedCards || [],
+          readingText: readingText || "",
+          timestamp: timestamp
+        });
+      }
+      
+      saveSpreads(spreads);
+      return res.json({ success: true });
+    } catch (e: any) {
+      console.error("Error saving spread history:", e);
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // API Endpoint 0.2: Admin Get All Spreads
+  app.get("/api/admin/all-spreads", (req: Request, res: Response) => {
+    const authUsername = (req.query.username as string || "").trim().toLowerCase().replace(/^@/, "");
+    
+    if (authUsername !== "youknowskii") {
+      return res.status(403).json({ error: "Доступ закрыт. Вы не являетесь верховным проводником эзотерической панели." });
+    }
+    
+    return res.json({ spreads: loadSpreads() });
+  });
 
   // Safe initialize Gemini-API server-side
   const geminiApiKey = process.env.GEMINI_API_KEY;
