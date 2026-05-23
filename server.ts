@@ -26,7 +26,16 @@ async function startServer() {
     timestamp: string;
   }
 
+  interface SavedUser {
+    username: string;
+    firstName: string;
+    stats: any;
+    isPremium: boolean;
+    lastSync: string;
+  }
+
   const HISTORY_FILE = path.join(process.cwd(), "spreads_history.json");
+  const USERS_FILE = path.join(process.cwd(), "users_stats.json");
 
   function loadSpreads(): SavedSpread[] {
     try {
@@ -45,6 +54,26 @@ async function startServer() {
       fs.writeFileSync(HISTORY_FILE, JSON.stringify(spreads, null, 2), "utf-8");
     } catch (e) {
       console.error("Error saving spreads file:", e);
+    }
+  }
+
+  function loadUsers(): Record<string, SavedUser> {
+    try {
+      if (fs.existsSync(USERS_FILE)) {
+        const data = fs.readFileSync(USERS_FILE, "utf-8");
+        return JSON.parse(data);
+      }
+    } catch (e) {
+      console.error("Error loading users file:", e);
+    }
+    return {};
+  }
+
+  function saveUsers(users: Record<string, SavedUser>) {
+    try {
+      fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), "utf-8");
+    } catch (e) {
+      console.error("Error saving users file:", e);
     }
   }
 
@@ -86,6 +115,65 @@ async function startServer() {
     }
   });
 
+  // API Endpoint 0.15: Server User statistics sync
+  app.post("/api/sync-stats", (req: Request, res: Response) => {
+    try {
+      const { user, stats, isPremium } = req.body;
+      const usernameVal = (user?.username || "anonymous").trim().toLowerCase().replace(/^@/, "");
+      // Create user search key
+      const userKey = usernameVal || `id_${user?.id || 'unknown'}`;
+      
+      if (!userKey || userKey === "anonymous") {
+        return res.json({ success: false, reason: "Anonymous or empty user detail bypassed sync." });
+      }
+
+      const users = loadUsers();
+      const now = new Date().toISOString();
+
+      if (!users[userKey]) {
+        users[userKey] = {
+          username: user?.username || "anonymous",
+          firstName: user?.firstName || "Гость",
+          stats: stats || {},
+          isPremium: isPremium || false,
+          lastSync: now
+        };
+      } else {
+        const serverUser = users[userKey];
+        serverUser.firstName = user?.firstName || serverUser.firstName;
+        serverUser.username = user?.username || serverUser.username;
+        serverUser.lastSync = now;
+
+        // Merge incoming client statistics with server fields, prioritizing server fields override
+        if (stats) {
+          serverUser.stats = {
+            ...stats,
+            energy: serverUser.stats?.energy !== undefined ? serverUser.stats.energy : stats.energy,
+            maxEnergy: serverUser.stats?.maxEnergy !== undefined ? serverUser.stats.maxEnergy : stats.maxEnergy,
+            level: stats.level !== undefined ? stats.level : serverUser.stats?.level || 1,
+            totalReadings: stats.totalReadings !== undefined ? stats.totalReadings : serverUser.stats?.totalReadings || 0
+          };
+        }
+        
+        if (serverUser.isPremium) {
+          // Keep true once set as premium under administrative order
+        } else {
+          serverUser.isPremium = isPremium || false;
+        }
+      }
+
+      saveUsers(users);
+      return res.json({ 
+        success: true, 
+        stats: users[userKey].stats, 
+        isPremium: users[userKey].isPremium 
+      });
+    } catch (e: any) {
+      console.error("Error synchronizing statistics at server:", e);
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   // API Endpoint 0.2: Admin Get All Spreads
   app.get("/api/admin/all-spreads", (req: Request, res: Response) => {
     const authUsername = (req.query.username as string || "").trim().toLowerCase().replace(/^@/, "");
@@ -95,6 +183,68 @@ async function startServer() {
     }
     
     return res.json({ spreads: loadSpreads() });
+  });
+
+  // API Endpoint 0.22: Admin Get All Users
+  app.get("/api/admin/all-users", (req: Request, res: Response) => {
+    try {
+      const authUsername = (req.query.username as string || "").trim().toLowerCase().replace(/^@/, "");
+      
+      if (authUsername !== "youknowskii") {
+        return res.status(403).json({ error: "Доступ закрыт. Вы не являетесь верховным проводником эзотерической панели." });
+      }
+
+      const users = loadUsers();
+      return res.json({ users: Object.values(users) });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // API Endpoint 0.25: Admin Grant Custom Energy & Premium Status
+  app.post("/api/admin/modify-user", (req: Request, res: Response) => {
+    try {
+      const { adminUsername, targetUsername, energy, isPremium, maxEnergy } = req.body;
+      const authUsername = (adminUsername || "").trim().toLowerCase().replace(/^@/, "");
+
+      if (authUsername !== "youknowskii") {
+        return res.status(403).json({ error: "Доступ закрыт. Вы не являетесь верховным проводником." });
+      }
+
+      const users = loadUsers();
+      const targetKey = (targetUsername || "").trim().toLowerCase().replace(/^@/, "");
+
+      if (!users[targetKey]) {
+        return res.status(404).json({ error: "Указанный пользователь не найден в астральном эфире." });
+      }
+
+      if (!users[targetKey].stats) {
+        users[targetKey].stats = {};
+      }
+
+      if (energy !== undefined) {
+        users[targetKey].stats.energy = Number(energy);
+      }
+
+      if (maxEnergy !== undefined) {
+        users[targetKey].stats.maxEnergy = Number(maxEnergy);
+      }
+
+      if (isPremium !== undefined) {
+        users[targetKey].isPremium = Boolean(isPremium);
+        if (Boolean(isPremium)) {
+          users[targetKey].stats.maxEnergy = 150;
+        }
+      }
+
+      users[targetKey].lastSync = new Date().toISOString();
+      saveUsers(users);
+
+      return res.json({ success: true, user: users[targetKey] });
+    } catch (e: any) {
+      console.error("Error modifying user balance on server:", e);
+      return res.status(500).json({ error: e.message });
+    }
   });
 
   // Safe initialize Gemini-API server-side

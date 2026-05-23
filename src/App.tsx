@@ -125,6 +125,48 @@ export default function App() {
     }
   }, []);
 
+  const syncWithServer = async (targetUser: TelegramUser, targetStats: UserStats, premium: boolean) => {
+    try {
+      const usernameVal = (targetUser?.username || "").trim().toLowerCase().replace(/^@/, "");
+      if (!usernameVal || usernameVal === "anonymous") return;
+
+      const resp = await fetch("/api/sync-stats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user: targetUser, stats: targetStats, isPremium: premium })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.success && data.stats) {
+          // If server returned different values, update our client states safely
+          const updatedServerStats = data.stats;
+          const updatedPremium = data.isPremium;
+
+          if (JSON.stringify(updatedServerStats) !== JSON.stringify(targetStats)) {
+            setStats(updatedServerStats);
+            localStorage.setItem("cosmo_tarot_stats", JSON.stringify(updatedServerStats));
+          }
+          if (updatedPremium !== premium) {
+            setIsPremium(updatedPremium);
+            localStorage.setItem("cosmo_tarot_premium", String(updatedPremium));
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Could not sync statistics with server:", e);
+    }
+  };
+
+  // Trigger server sync whenever state is updated (debounced or on changes)
+  useEffect(() => {
+    if (user && stats) {
+      const timer = setTimeout(() => {
+        syncWithServer(user, stats, isPremium);
+      }, 1200);
+      return () => clearTimeout(timer);
+    }
+  }, [user.username, stats.totalReadings, stats.experiencePoints, stats.energy, isPremium]);
+
   // Update localStorage helper on statistic triggers
   const saveStats = (updated: UserStats) => {
     setStats(updated);

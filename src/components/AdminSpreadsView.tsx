@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { ArrowLeft, RefreshCw, Search, Calendar, User, AlignLeft, AlertCircle, ChevronDown, ChevronUp, Sparkles, HelpCircle } from "lucide-react";
+import { ArrowLeft, RefreshCw, Search, Calendar, User, AlignLeft, AlertCircle, ChevronDown, ChevronUp, Sparkles, HelpCircle, Shield, Award, Zap, Star } from "lucide-react";
 import { TelegramUser, SpreadConfig } from "../types";
 import { TAROT_CARDS } from "../data/tarotData";
 import { triggerVibration } from "../utils/magicEffects";
@@ -21,17 +21,37 @@ interface SavedSpread {
   timestamp: string;
 }
 
+interface SavedUser {
+  username: string;
+  firstName: string;
+  stats: {
+    energy: number;
+    maxEnergy: number;
+    totalReadings?: number;
+    level?: number;
+    experiencePoints?: number;
+  };
+  isPremium: boolean;
+  lastSync: string;
+}
+
 interface AdminSpreadsViewProps {
   user: TelegramUser;
   onBack: () => void;
 }
 
 export default function AdminSpreadsView({ user, onBack }: AdminSpreadsViewProps) {
+  const [activeTab, setActiveTab] = useState<"spreads" | "users">("spreads");
   const [spreads, setSpreads] = useState<SavedSpread[]>([]);
+  const [users, setUsers] = useState<SavedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
+  
+  // Custom manual energy value field states
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [customEnergyValue, setCustomEnergyValue] = useState("");
 
   const cleanUsername = (user.username || "").trim().toLowerCase().replace(/^@/, "");
   const isAdmin = cleanUsername === "youknowskii";
@@ -64,9 +84,38 @@ export default function AdminSpreadsView({ user, onBack }: AdminSpreadsViewProps
     }
   };
 
+  const fetchUsers = async () => {
+    if (!isAdmin) return;
+    setLoading(true);
+    setError("");
+    triggerVibration("light");
+
+    try {
+      const resp = await fetch(`/api/admin/all-users?username=${encodeURIComponent(user.username || "")}`);
+      if (!resp.ok) {
+        throw new Error("Не удалось загрузить реестр пользователей.");
+      }
+      const data = await resp.json();
+      setUsers(data.users || []);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Глобальный сбой астрального зеркала.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadData = () => {
+    if (activeTab === "spreads") {
+      fetchSpreads();
+    } else {
+      fetchUsers();
+    }
+  };
+
   useEffect(() => {
-    fetchSpreads();
-  }, [user.username]);
+    loadData();
+  }, [activeTab, user.username]);
 
   const toggleExpand = (id: string) => {
     triggerVibration("light");
@@ -74,7 +123,36 @@ export default function AdminSpreadsView({ user, onBack }: AdminSpreadsViewProps
   };
 
   const handleRefresh = () => {
-    fetchSpreads();
+    loadData();
+  };
+
+  // Modify user server-side helper (Grant Energy, Premium, MaxEnergy)
+  const handleModifyUser = async (targetUserKey: string, payload: { energy?: number; isPremium?: boolean; maxEnergy?: number }) => {
+    triggerVibration("medium");
+    try {
+      const resp = await fetch("/api/admin/modify-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          adminUsername: user.username,
+          targetUsername: targetUserKey,
+          ...payload
+        })
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json();
+        alert(errData.error || "Ошибка изменения состояния пользователя.");
+        return;
+      }
+
+      // Success
+      triggerVibration("success");
+      fetchUsers(); // Refresh listings
+      setEditingUserId(null);
+    } catch (e: any) {
+      alert("Сбой сети при изменении: " + e.message);
+    }
   };
 
   // Format readable timestamp
@@ -100,6 +178,14 @@ export default function AdminSpreadsView({ user, onBack }: AdminSpreadsViewProps
       s.firstName.toLowerCase().includes(term) ||
       s.spreadName.toLowerCase().includes(term) ||
       (s.userQuestion || "").toLowerCase().includes(term)
+    );
+  });
+
+  const filteredUsers = users.filter((u) => {
+    const term = searchQuery.toLowerCase();
+    return (
+      u.username.toLowerCase().includes(term) ||
+      u.firstName.toLowerCase().includes(term)
     );
   });
 
@@ -140,9 +226,9 @@ export default function AdminSpreadsView({ user, onBack }: AdminSpreadsViewProps
           </button>
           <div className="flex flex-col">
             <h2 className="font-serif font-semibold text-lg text-[#ffd700] tracking-wide flex items-center gap-1.5">
-              Зеркало Судеб <Sparkles className="w-4 h-4 text-[#ffd700] animate-pulse" />
+              Панель Жреца <Shield className="w-4 h-4 text-[#ffd700] animate-pulse" />
             </h2>
-            <span className="text-[#e0d8cf]/70 text-xs font-serif font-light">Свод чужих сеансов прорицания</span>
+            <span className="text-[#e0d8cf]/70 text-xs font-serif font-light">Свод судеб и управление энергией</span>
           </div>
         </div>
 
@@ -156,38 +242,68 @@ export default function AdminSpreadsView({ user, onBack }: AdminSpreadsViewProps
         </button>
       </div>
 
-      {/* Stats Quick Counter */}
+      {/* Tabs Switcher Grid */}
+      <div className="grid grid-cols-2 p-1 bg-[#050208]/60 border border-[#ffd700]/15 rounded-xl">
+        <button
+          onClick={() => { triggerVibration("light"); setActiveTab("spreads"); setSearchQuery(""); }}
+          className={`py-2 text-xs font-serif rounded-lg transition-all ${
+            activeTab === "spreads" 
+              ? "bg-[#ffd700]/12 text-[#ffd700] border border-[#ffd700]/25 font-semibold" 
+              : "text-[#e0d8cf]/60 hover:text-white"
+          }`}
+        >
+          🔮 Расклады судей ({spreads.length})
+        </button>
+        <button
+          onClick={() => { triggerVibration("light"); setActiveTab("users"); setSearchQuery(""); }}
+          className={`py-2 text-xs font-serif rounded-lg transition-all ${
+            activeTab === "users" 
+              ? "bg-[#ffd700]/12 text-[#ffd700] border border-[#ffd700]/25 font-semibold" 
+              : "text-[#e0d8cf]/60 hover:text-white"
+          }`}
+        >
+          👥 Пользователи ({users.length})
+        </button>
+      </div>
+
+      {/* Quick Counter overview */}
       <div className="grid grid-cols-2 gap-3.5 bg-[#0d041a]/40 border border-[#ffd700]/15 rounded-xl p-3 text-left">
         <div className="flex flex-col">
-          <span className="text-[9px] font-sans uppercase tracking-wider text-[#ffd700]/60">Всего сессий в БД</span>
-          <span className="text-xl font-mono font-bold text-white mt-0.5">{spreads.length}</span>
+          <span className="text-[9px] font-sans uppercase tracking-wider text-[#ffd700]/60">
+            {activeTab === "spreads" ? "Всего сессий в БД" : "Пользователей в бд"}
+          </span>
+          <span className="text-xl font-mono font-bold text-white mt-0.5">
+            {activeTab === "spreads" ? spreads.length : users.length}
+          </span>
         </div>
         <div className="flex flex-col border-l border-[#ffd700]/15 pl-4">
           <span className="text-[9px] font-sans uppercase tracking-wider text-[#ffd700]/60">Найдено фильтром</span>
-          <span className="text-xl font-mono font-bold text-[#ffd700] mt-0.5">{filteredSpreads.length}</span>
+          <span className="text-xl font-mono font-bold text-[#ffd700] mt-0.5">
+            {activeTab === "spreads" ? filteredSpreads.length : filteredUsers.length}
+          </span>
         </div>
       </div>
 
-      {/* Interactive Search Field */}
+      {/* Interactive Filter Control */}
       <div className="relative">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
         <input 
           type="text"
-          placeholder="Искать по нику, имени или раскладу..."
+          placeholder={activeTab === "spreads" ? "Искать по нику, имени или раскладу..." : "Искать пользователя по нику или имени..."}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full bg-[#050208]/80 border border-[#ffd700]/15 hover:border-[#ffd700]/30 focus:border-[#ffd700]/50 focus:outline-none rounded-xl py-2.5 pl-10 pr-4 text-xs text-[#e0d8cf] placeholder-gray-600 transition-all"
         />
       </div>
 
-      {/* Main List Box */}
+      {/* Loading state indicator */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-16 gap-3">
           <div className="relative w-10 h-10 rounded-full border-2 border-[#ffd700]/30 border-t-[#ffd700] animate-spin" />
-          <span className="text-xs font-serif font-light text-[#e0d8cf]/70 animate-pulse">Считывание астральных логов...</span>
+          <span className="text-xs font-serif font-light text-[#e0d8cf]/70 animate-pulse">Сканирование логов судьбы...</span>
         </div>
       ) : error ? (
-        <div className="bg-red-950/20 border border-red-500/20 rounded-2xl p-6 text-center select-none">
+        <div className="bg-red-950/20 border border-red-500/20 rounded-2xl p-6 text-center">
           <AlertCircle className="w-8 h-8 text-rose-400 mx-auto mb-2" />
           <span className="text-xs font-serif font-semibold text-rose-400 block">{error}</span>
           <button 
@@ -197,142 +313,305 @@ export default function AdminSpreadsView({ user, onBack }: AdminSpreadsViewProps
             Попробовать снова
           </button>
         </div>
-      ) : filteredSpreads.length === 0 ? (
-        <div className="bg-[#0d041a]/60 border border-[#ffd700]/15 rounded-2xl p-8 flex flex-col items-center justify-center gap-4 text-center min-h-[250px]">
-          <div className="p-3 bg-[#050208] rounded-full border border-[#ffd700]/15 text-[#ffd700]/40">
-            <AlertCircle className="w-6 h-6" />
+      ) : activeTab === "spreads" ? (
+        
+        // SPREADS TAB LIST
+        filteredSpreads.length === 0 ? (
+          <div className="bg-[#0d041a]/60 border border-[#ffd700]/15 rounded-2xl p-8 flex flex-col items-center justify-center gap-4 text-center min-h-[250px]">
+            <div className="p-3 bg-[#050208] rounded-full border border-[#ffd700]/15 text-[#ffd700]/40">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <h3 className="font-serif font-semibold text-sm text-[#ffd700]">История сессий пуста</h3>
+              <p className="text-[#e0d8cf]/70 text-[11px] font-serif font-light px-6 leading-relaxed mt-0.5">
+                {searchQuery ? "По данному фильтру совпадений в эфире не найдено." : "В космической базе данных еще нет сохраненных разборов пользователей."}
+              </p>
+            </div>
           </div>
-          <div className="flex flex-col gap-1">
-            <h3 className="font-serif font-semibold text-sm text-[#ffd700]">История сессий пуста</h3>
-            <p className="text-[#e0d8cf]/70 text-[11px] font-serif font-light px-6 leading-relaxed mt-0.5">
-              {searchQuery ? "По данному фильтру совпадений в эфире не найдено." : "В космической базе данных еще нет сохраненных разборов пользователей."}
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {filteredSpreads.map((item) => {
-            const isExpanded = !!expandedIds[item.id];
-            return (
-              <div 
-                key={item.id}
-                className="bg-[#0d041a]/60 rounded-2xl border border-[#ffd700]/15 hover:border-[#ffd700]/30 hover:shadow-[0_0_20px_rgba(255,215,0,0.03)] transition-all overflow-hidden text-left"
-              >
-                {/* Header item summary */}
+        ) : (
+          <div className="flex flex-col gap-4">
+            {filteredSpreads.map((item) => {
+              const isExpanded = !!expandedIds[item.id];
+              return (
                 <div 
-                  onClick={() => toggleExpand(item.id)}
-                  className="p-4 cursor-pointer select-none flex flex-col gap-2"
+                  key={item.id}
+                  className="bg-[#0d041a]/60 rounded-2xl border border-[#ffd700]/15 hover:border-[#ffd700]/30 hover:shadow-[0_0_20px_rgba(255,215,0,0.03)] transition-all overflow-hidden text-left"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex flex-col">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[#ffd700] font-serif font-semibold text-xs bg-[#ffd700]/10 border border-[#ffd700]/25 px-1.5 py-0.5 rounded">
-                          {item.firstName}
-                        </span>
-                        {item.username && item.username !== "anonymous" ? (
-                          <span className="text-xs text-sky-400 font-mono font-medium hover:underline">
-                            @{item.username}
+                  <div 
+                    onClick={() => toggleExpand(item.id)}
+                    className="p-4 cursor-pointer select-none flex flex-col gap-2"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[#ffd700] font-serif font-semibold text-[10px] bg-[#ffd700]/10 border border-[#ffd700]/25 px-1.5 py-0.5 rounded">
+                            {item.firstName}
                           </span>
-                        ) : (
-                          <span className="text-[10px] text-gray-500 font-mono">Гость</span>
-                        )}
+                          {item.username && item.username !== "anonymous" ? (
+                            <span className="text-xs text-sky-400 font-mono font-medium hover:underline">
+                              @{item.username}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-gray-500 font-mono">Гость</span>
+                          )}
+                        </div>
+                        <span className="text-white text-sm font-serif font-medium mt-1">{item.spreadName}</span>
                       </div>
-                      <span className="text-white text-sm font-serif font-medium mt-1">{item.spreadName}</span>
+
+                      <div className="flex flex-col items-end shrink-0 gap-1.5">
+                        <span className="text-[9px] text-[#e0d8cf]/40 font-mono block">
+                          {formatTime(item.timestamp)}
+                        </span>
+                        {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                      </div>
                     </div>
 
-                    <div className="flex flex-col items-end shrink-0 gap-1.5">
-                      <span className="text-[9px] text-[#e0d8cf]/40 font-mono block">
-                        {formatTime(item.timestamp)}
-                      </span>
-                      {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
-                    </div>
+                    {item.userQuestion && (
+                      <p className="text-[11px] text-[#e0d8cf]/70 line-clamp-1 italic font-serif pl-1 border-l border-[#ffd700]/30">
+                        Вопрос: &quot;{item.userQuestion}&quot;
+                      </p>
+                    )}
                   </div>
 
-                  {/* Show question overview if present */}
-                  {item.userQuestion && (
-                    <p className="text-[11px] text-[#e0d8cf]/70 line-clamp-1 italic font-serif pl-1 border-l border-purple-500/30">
-                      Вопрос: &quot;{item.userQuestion}&quot;
-                    </p>
+                  {isExpanded && (
+                    <div className="border-t border-[#ffd700]/10 px-4.5 pb-4 pt-4 bg-[#050208]/40 flex flex-col gap-4 animate-fade-in text-xs text-[#e0d8cf]/80">
+                      {item.userQuestion && (
+                        <div className="bg-[#0d041a]/40 border border-[#ffd700]/10 rounded-xl p-3 text-left">
+                          <span className="text-[9px] font-sans uppercase tracking-widest text-[#ffd700]/70 font-semibold block mb-1">Вопрос пользователя к картам:</span>
+                          <p className="font-serif italic text-xs text-[#ffd700]/90 leading-relaxed pl-1.5 border-l border-[#ffd700]/40">
+                            &quot;{item.userQuestion}&quot;
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="flex flex-col gap-2.5">
+                        <span className="text-[9px] font-sans uppercase tracking-widest text-[#ffd700]/70 font-semibold">Список выпавших арканов:</span>
+                        <div className="flex flex-col gap-2">
+                          {item.selectedCards.map((c, idx) => {
+                            const originalCard = TAROT_CARDS.find(tc => tc.nameRu === c.nameRu || tc.nameEn === c.nameEn);
+                            
+                            return (
+                              <div 
+                                key={idx}
+                                className="bg-[#0d041a]/40 border border-[#ffd700]/10 rounded-xl p-2.5 flex items-center justify-between gap-3 text-left"
+                              >
+                                <div className="flex items-center gap-3">
+                                  {originalCard && (
+                                    <div className="shrink-0 scale-90 -my-1 -mx-0.5">
+                                      <TarotCardGraphic
+                                        cardId={originalCard.id}
+                                        nameRu={originalCard.nameRu}
+                                        nameEn={originalCard.nameEn}
+                                        isReversed={c.isReversed}
+                                        isFlipped={true}
+                                        size="sm"
+                                      />
+                                    </div>
+                                  )}
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-[9px] text-[#ffd700] font-serif font-light">{c.positionName}</span>
+                                    <span className="font-serif font-semibold text-[#e0d8cf] text-[11px]">{c.nameRu}</span>
+                                  </div>
+                                </div>
+                                <span className={`text-[9px] font-serif font-light uppercase px-1.5 py-0.5 rounded ${c.isReversed ? "bg-purple-950/30 text-[#bc13fe] border border-[#bc13fe]/20" : "bg-yellow-950/30 text-[#ffd700] border border-[#ffd700]/20"}`}>
+                                  {c.isReversed ? "Перев." : "Прямая"}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <span className="text-[9px] font-sans uppercase tracking-widest text-[#ffd700]/70 font-semibold">Ответ Оракула (AI Трактовка):</span>
+                        <div className="bg-[#0d041a]/40 border border-[#ffd700]/10 rounded-xl p-3.5 max-h-[250px] overflow-y-auto font-serif text-[11px] leading-relaxed text-[#e0d8cf] whitespace-pre-wrap select-text scrollbar-thin">
+                          {item.readingText ? (
+                            item.readingText
+                          ) : (
+                            <span className="text-gray-600 block text-center py-2 font-light italic">
+                              Сессия завершена без запроса текстовой AI расшифровки оракула.
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-[8px] font-mono text-gray-500 text-center select-all">
+                        UUID: {item.id}
+                      </div>
+                    </div>
                   )}
                 </div>
+              );
+            })}
+          </div>
+        )
+      ) : (
+        
+        // USERS TAB LIST WITH DIRECT ENERGY MANAGEMENT
+        filteredUsers.length === 0 ? (
+          <div className="bg-[#0d041a]/60 border border-[#ffd700]/15 rounded-2xl p-8 flex flex-col items-center justify-center gap-4 text-center min-h-[250px]">
+            <div className="p-3 bg-[#050208] rounded-full border border-[#ffd700]/15 text-[#ffd700]/40">
+              <User className="w-6 h-6" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <h3 className="font-serif font-semibold text-sm text-[#ffd700]">Пользователи не обнаружены</h3>
+              <p className="text-[#e0d8cf]/70 text-[11px] font-serif font-light px-6 leading-relaxed mt-0.5">
+                Кажется, проводники с такими реквизитами еще не синхронизировали свою астральную сущность с сервером.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4.5">
+            {filteredUsers.map((client) => {
+              const clientKey = client.username ? client.username.toLowerCase().replace(/^@/, "") : "";
+              const currentEnergy = client.stats?.energy ?? 60;
+              const maxEnergy = client.stats?.maxEnergy ?? 100;
+              const isUserPrem = !!client.isPremium;
+              const isSelf = clientKey === cleanUsername;
 
-                {/* Expanded active details lists */}
-                {isExpanded && (
-                  <div className="border-t border-[#ffd700]/10 px-4.5 pb-4 pt-4 bg-[#050208]/40 flex flex-col gap-4 animate-fade-in text-xs text-[#e0d8cf]/80">
-                    
-                    {/* Full detailed Question */}
-                    {item.userQuestion && (
-                      <div className="bg-[#0d041a]/40 border border-[#ffd700]/10 rounded-xl p-3 text-left">
-                        <span className="text-[9px] font-sans uppercase tracking-widest text-[#ffd700]/70 font-semibold block mb-1">Вопрос пользователя к картам:</span>
-                        <p className="font-serif italic text-xs text-[#ffd700]/90 leading-relaxed pl-1.5 border-l border-[#ffd700]/40">
-                          &quot;{item.userQuestion}&quot;
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Flipped symbols layout lists */}
-                    <div className="flex flex-col gap-2.5">
-                      <span className="text-[9px] font-sans uppercase tracking-widest text-[#ffd700]/70 font-semibold">Список выпавших арканов:</span>
-                      <div className="flex flex-col gap-2">
-                        {item.selectedCards.map((c, idx) => {
-                          const originalCard = TAROT_CARDS.find(tc => tc.nameRu === c.nameRu || tc.nameEn === c.nameEn);
-                          
-                          return (
-                            <div 
-                              key={idx}
-                              className="bg-[#0d041a]/40 border border-[#ffd700]/10 rounded-xl p-2.5 flex items-center justify-between gap-3 text-left"
-                            >
-                              <div className="flex items-center gap-3">
-                                {originalCard && (
-                                  <div className="shrink-0 scale-90 -my-1 -mx-0.5">
-                                    <TarotCardGraphic
-                                      cardId={originalCard.id}
-                                      nameRu={originalCard.nameRu}
-                                      nameEn={originalCard.nameEn}
-                                      isReversed={c.isReversed}
-                                      isFlipped={true}
-                                      size="sm"
-                                    />
-                                  </div>
-                                )}
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="text-[9px] text-[#ffd700] font-serif font-light">{c.positionName}</span>
-                                  <span className="font-serif font-semibold text-[#e0d8cf] text-[11px]">{c.nameRu}</span>
-                                </div>
-                              </div>
-                              <span className={`text-[9px] font-serif font-light uppercase px-1.5 py-0.5 rounded ${c.isReversed ? "bg-purple-950/30 text-[#bc13fe] border border-[#bc13fe]/20" : "bg-yellow-950/30 text-[#ffd700] border border-[#ffd700]/20"}`}>
-                                {c.isReversed ? "Перев." : "Прямая"}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* AI Interpretation text component display */}
-                    <div className="flex flex-col gap-2">
-                      <span className="text-[9px] font-sans uppercase tracking-widest text-[#ffd700]/70 font-semibold">Ответ Оракула (AI Трактовка):</span>
-                      <div className="bg-[#0d041a]/40 border border-[#ffd700]/10 rounded-xl p-3.5 max-h-[250px] overflow-y-auto font-serif text-[11px] leading-relaxed text-[#e0d8cf] whitespace-pre-wrap select-text scrollbar-thin">
-                        {item.readingText ? (
-                          item.readingText
-                        ) : (
-                          <span className="text-gray-600 block text-center py-2 font-light italic">
-                            Сессия завершена без запроса текстовой AI расшифровки оракула.
+              return (
+                <div 
+                  key={clientKey}
+                  className="bg-[#0d041a]/60 rounded-2xl border border-[#ffd700]/15 p-4 flex flex-col gap-4 text-left"
+                >
+                  {/* Top Stats of specific user */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-serif font-semibold text-white text-sm">
+                          {client.firstName}
+                        </span>
+                        {isSelf && (
+                          <span className="text-[8px] font-mono uppercase bg-red-950 text-red-400 border border-red-500/30 px-1 py-0.5 rounded leading-none">
+                            ЭТО ВЫ
+                          </span>
+                        )}
+                        {isUserPrem && (
+                          <span className="flex items-center gap-0.5 text-[8.5px] font-sans font-bold uppercase bg-yellow-950/40 text-[#ffd700] border border-[#ffd700]/30 px-1.5 py-0.5 rounded leading-none">
+                            <Star className="w-2.5 h-2.5 fill-current" /> Premium
                           </span>
                         )}
                       </div>
+                      <span className="text-xs text-sky-400 font-mono">
+                        @{client.username}
+                      </span>
                     </div>
 
-                    <div className="text-[8px] font-mono text-gray-600 text-center select-all">
-                      UUID: {item.id}
+                    <div className="text-right flex flex-col items-end gap-1">
+                      <span className="text-[9px] text-[#e0d8cf]/40 font-mono">
+                        Синхр: {formatTime(client.lastSync)}
+                      </span>
+                      <span className="text-xs font-mono font-bold flex items-center gap-1 text-[#ffd700]">
+                        <Zap className="w-3.5 h-3.5 text-[#ffd700] fill-current" /> {currentEnergy} / {maxEnergy}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Level & Readings short list */}
+                  <div className="grid grid-cols-2 gap-2 bg-[#050208]/40 border-y border-[#ffd700]/10 py-2.5 rounded-lg px-2">
+                    <div className="flex flex-col">
+                      <span className="text-[8px] uppercase tracking-wider text-gray-500">Пройдено разборов</span>
+                      <span className="text-xs font-mono font-bold text-[#e0d8cf]">{client.stats?.totalReadings ?? 0}</span>
+                    </div>
+                    <div className="flex flex-col border-l border-[#ffd700]/10 pl-3">
+                      <span className="text-[8px] uppercase tracking-wider text-gray-500">Уровень души</span>
+                      <span className="text-xs font-mono font-bold text-[#e0d8cf]">{client.stats?.level ?? 1} LVL</span>
+                    </div>
+                  </div>
+
+                  {/* Direct Admin Control Buttons */}
+                  <div className="flex flex-col gap-2 pt-1">
+                    
+                    {/* Grant predefined values list */}
+                    <div className="flex flex-wrap gap-1.5 items-center justify-between">
+                      <span className="text-[8.5px] font-sans uppercase text-[#ffd700]/70 font-semibold">ВЫДАТЬ ЭНЕРГИЮ:</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleModifyUser(client.username, { energy: Math.min(currentEnergy + 10, maxEnergy) })}
+                          className="px-2 py-1 bg-yellow-950/20 text-[#ffd700] border border-[#ffd700]/30 rounded text-[9.5px] hover:bg-yellow-950/40 transition active:scale-90"
+                        >
+                          +10 🔋
+                        </button>
+                        <button
+                          onClick={() => handleModifyUser(client.username, { energy: Math.min(currentEnergy + 50, maxEnergy) })}
+                          className="px-2 py-1 bg-yellow-950/20 text-[#ffd700] border border-[#ffd700]/30 rounded text-[9.5px] hover:bg-yellow-950/40 transition active:scale-90"
+                        >
+                          +50 🔋
+                        </button>
+                        <button
+                          onClick={() => handleModifyUser(client.username, { energy: maxEnergy })}
+                          className="px-2 py-1 bg-emerald-950/20 text-emerald-400 border border-emerald-500/30 rounded text-[9.5px] hover:bg-emerald-950/40 transition active:scale-90 font-mono font-bold"
+                          title="Пополнить до максимума"
+                        >
+                          MAX
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Advanced parameters editor */}
+                    <div className="flex items-center justify-between gap-2.5 bg-[#050208]/20 p-2 rounded-lg border border-[#ffd700]/10 mt-1">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleModifyUser(client.username, { isPremium: !isUserPrem })}
+                          className={`px-3 py-1.5 border rounded-lg text-xs font-serif transition-all active:scale-95 ${
+                            isUserPrem 
+                              ? "bg-purple-950/30 border-purple-500/40 text-[#bc13fe] hover:bg-purple-950/50" 
+                              : "bg-[#0d041a]/40 border-[#ffd700]/30 text-[#ffd700] hover:bg-yellow-950/20"
+                          }`}
+                        >
+                          {isUserPrem ? "👑 Забрать Premium" : "👑 Подарить Premium"}
+                        </button>
+                      </div>
+
+                      {/* Manual edit trigger */}
+                      {editingUserId === clientKey ? (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <input 
+                            type="number"
+                            placeholder="Энергия"
+                            value={customEnergyValue}
+                            onChange={(e) => setCustomEnergyValue(e.target.value)}
+                            className="bg-[#050208] border border-[#ffd700]/30 rounded px-1.5 py-1 text-center w-14 text-xs font-mono text-[#ffd700] focus:outline-none"
+                            min="0"
+                            max="999"
+                          />
+                          <button
+                            onClick={() => {
+                              const amount = Number(customEnergyValue);
+                              if (isNaN(amount) || amount < 0) return alert("Введите адекватное число.");
+                              handleModifyUser(client.username, { energy: amount, maxEnergy: Math.max(maxEnergy, amount) });
+                            }}
+                            className="px-2 py-1 bg-[#ffd700] text-black text-[9px] rounded font-bold hover:bg-[#ffe55c]"
+                          >
+                            OK
+                          </button>
+                          <button
+                            onClick={() => setEditingUserId(null)}
+                            className="px-1.5 py-1 text-gray-500 text-[9px] hover:text-white"
+                          >
+                            X
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setEditingUserId(clientKey);
+                            setCustomEnergyValue(String(currentEnergy));
+                          }}
+                          className="px-2 py-1.5 border border-dashed border-[#e0d8cf]/20 hover:border-[#ffd700]/40 text-[#e0d8cf]/70 hover:text-white rounded-lg text-[10px] font-sans"
+                        >
+                          Задать точное...
+                        </button>
+                      )}
                     </div>
 
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+
+                </div>
+              );
+            })}
+          </div>
+        )
       )}
 
     </div>
