@@ -176,13 +176,18 @@ async function startServer() {
 
   // API Endpoint 0.2: Admin Get All Spreads
   app.get("/api/admin/all-spreads", (req: Request, res: Response) => {
-    const authUsername = (req.query.username as string || "").trim().toLowerCase().replace(/^@/, "");
-    
-    if (authUsername !== "youknowskii") {
-      return res.status(403).json({ error: "Доступ закрыт. Вы не являетесь верховным проводником эзотерической панели." });
+    try {
+      const authUsername = (req.query.username as string || "").trim().toLowerCase().replace(/^@/, "");
+      
+      if (authUsername !== "youknowskii") {
+        return res.status(403).json({ error: "Доступ закрыт. Вы не являетесь верховным проводником эзотерической панели." });
+      }
+      
+      return res.json({ spreads: loadSpreads() });
+    } catch (e: any) {
+      console.error("Error in all-spreads API:", e);
+      return res.status(500).json({ error: "Ошибка сервера при чтении раскладов: " + e.message });
     }
-    
-    return res.json({ spreads: loadSpreads() });
   });
 
   // API Endpoint 0.22: Admin Get All Users
@@ -197,7 +202,8 @@ async function startServer() {
       const users = loadUsers();
       return res.json({ users: Object.values(users) });
     } catch (e: any) {
-      return res.status(500).json({ error: e.message });
+      console.error("Error in all-users API:", e);
+      return res.status(500).json({ error: "Ошибка сервера при чтении пользователей: " + e.message });
     }
   });
 

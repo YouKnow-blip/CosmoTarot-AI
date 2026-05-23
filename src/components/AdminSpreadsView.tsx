@@ -65,10 +65,16 @@ export default function AdminSpreadsView({ user, onBack }: AdminSpreadsViewProps
     try {
       const resp = await fetch(`/api/admin/all-spreads?username=${encodeURIComponent(user.username || "")}`);
       if (!resp.ok) {
+        let serverError = "";
+        try {
+          const errData = await resp.json();
+          serverError = errData.error || errData.message || "";
+        } catch (_) {}
+
         if (resp.status === 403) {
-          throw new Error("Астральный фильтр отклонил доступ. Код 403.");
+          throw new Error(serverError || "Астральный фильтр отклонил доступ. Код 403.");
         }
-        throw new Error("Не удалось загрузить списки раскладов.");
+        throw new Error(serverError || `Ошибка загрузки (${resp.status}): Не удалось прочитать списки раскладов.`);
       }
       const data = await resp.json();
       setSpreads(data.spreads || []);
@@ -93,7 +99,12 @@ export default function AdminSpreadsView({ user, onBack }: AdminSpreadsViewProps
     try {
       const resp = await fetch(`/api/admin/all-users?username=${encodeURIComponent(user.username || "")}`);
       if (!resp.ok) {
-        throw new Error("Не удалось загрузить реестр пользователей.");
+        let serverError = "";
+        try {
+          const errData = await resp.json();
+          serverError = errData.error || errData.message || "";
+        } catch (_) {}
+        throw new Error(serverError || `Ошибка загрузки (${resp.status}): Не удалось прогрузить реестр душ.`);
       }
       const data = await resp.json();
       setUsers(data.users || []);
