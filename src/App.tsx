@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Sparkles, Activity, Award } from "lucide-react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import { TelegramUser, UserStats, HistoryRecord, SpreadConfig } from "./types";
 import { getTelegramUser, getTelegramWebApp, triggerVibration, playMagicalChime } from "./utils/magicEffects";
 import { SPREADS_CONFIG } from "./data/tarotData";
@@ -413,6 +414,7 @@ export default function App() {
         )}
 
       </main>
+      <SpeedInsights />
     </div>
   );
 }
