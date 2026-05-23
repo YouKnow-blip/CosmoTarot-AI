@@ -70,15 +70,47 @@ async function startServer() {
   }
 
   function loadUsers(): Record<string, SavedUser> {
+    let users: Record<string, SavedUser> = {};
     try {
       if (fs.existsSync(USERS_FILE)) {
         const data = fs.readFileSync(USERS_FILE, "utf-8");
-        return JSON.parse(data);
+        users = JSON.parse(data);
       }
     } catch (e) {
       console.error("Error loading users file:", e);
     }
-    return {};
+
+    // Pre-populate core users so they are always visible in your admin list immediately
+    const defaultUsers = ["youknowskii", "sxtfd"];
+    let changed = false;
+    for (const username of defaultUsers) {
+      const key = username.toLowerCase().trim();
+      if (!users[key]) {
+        users[key] = {
+          username: username,
+          firstName: username === "youknowskii" ? "Верховный Проводник" : "Астральная Душа @sxtfd",
+          stats: {
+            totalReadings: 0,
+            experiencePoints: 0,
+            energy: 100,
+            maxEnergy: 100,
+            level: 1
+          },
+          isPremium: true,
+          lastSync: new Date().toISOString()
+        };
+        changed = true;
+      }
+    }
+    if (changed) {
+      try {
+        fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), "utf-8");
+      } catch (err) {
+        console.error("Error writing auto-prepopulated users on load:", err);
+      }
+    }
+
+    return users;
   }
 
   function saveUsers(users: Record<string, SavedUser>) {
