@@ -1,0 +1,6 @@
+{
+  "name": "CosmoTarot",
+  "description": "Premium mystical Telegram Mini App for Tarot readings, name compatibility, and daily cosmic guidance powered by Gemini AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,194 @@
+import express, { Request, Response } from "express";
+import path from "path";
+import dotenv from "dotenv";
+import { createServer as createViteServer } from "vite";
+import { GoogleGenAI } from "@google/genai";
+
+dotenv.config();
+
+async function startServer() {
+  const app = express();
+  const PORT = 3000;
+
+  // JSON Body parser
+  app.use(express.json());
+
+  // Safe initialize Gemini-API server-side
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  let ai: GoogleGenAI | null = null;
+  
+  if (geminiApiKey) {
+    try {
+      ai = new GoogleGenAI({
+        apiKey: geminiApiKey,
+        httpOptions: {
+          headers: {
+            "User-Agent": "aistudio-build",
+          },
+        },
+      });
+      console.log("CosmoTarot Backend: Gemini API client successfully initialized.");
+    } catch (e) {
+      console.error("CosmoTarot Backend: Failed to initialize Gemini client", e);
+    }
+  } else {
+    console.warn("CosmoTarot Backend: GEMINI_API_KEY is not defined in the environment. AI readings will fallback to mock readings.");
+  }
+
+  // API Endpoint 1: Tarot Spreads AI Reading
+  app.post("/api/tarot-reading", async (req: Request, res: Response) => {
+    try {
+      const { spreadName, selectedCards, userQuestion } = req.body;
+
+      if (!selectedCards || !Array.isArray(selectedCards) || selectedCards.length === 0) {
+        return res.status(400).json({ error: "Missing or invalid cards for tarot reading simulation." });
+      }
+
+      const questionText = userQuestion && userQuestion.trim() !== "" 
+        ? `Вопрос вопрошающего: "${userQuestion}"` 
+        : "Вопрос:Общее руководство и энергетический разбор текущей ситуации.";
+
+      // Format card description list for AI
+      const cardsPromptSegment = selectedCards.map((c: any, index: number) => {
+        return `Карта ${index + 1} на позиции "${c.positionName}":
+Название: "${c.nameRu}" (${c.nameEn})
+Положение: ${c.isReversed ? "ПЕРЕВЕРНУТОЕ (ослабленная сила или внутреннее сопротивление)" : "ПРЯМОЕ (проявление вовне, открытая энергия)"}
+Ключевые слова: ${c.isReversed ? c.reversedKeywords.join(", ") : c.uprightKeywords.join(", ")}
+Основная суть: ${c.description}`;
+      }).join("\n\n");
+
+      const promptHtml = `
+Проведи глубокое сакральное толкование расклада Таро под названием "${spreadName}".
+${questionText}
+
+Выпавшие карты:
+${cardsPromptSegment}
+
+Раздели анализ на следующие разделы с красивой структурой Markdown:
+1. ✨ **Астральное Слияние**: Космический обзор сочетания выпавших энергий. Какая общая вибрация окружает этот момент времени?
+2. 🔮 **Сакральная Тетрада / Разбор расклада**: Проинтерпретируй подробно КАЖДУЮ карту с учётом её позиции и его ориентации (прямая/перевернутая). Расскажи, как эти карты отвечают на вопрос или влияют на судьбу.
+3. 🌌 **Духовное Откровение**: Скрытый психологический и кармический урок этой ситуации для вопрошающего. Чему учит космос?
+4. 🗝️ **Резонансный Совет**: Четкий, практический и поддерживающий совет на будущее. Сделай акцент на вдохновляющем действии.
+`;
+
+      if (ai) {
+        const response = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: promptHtml,
+          config: {
+            systemInstruction: "Ты — CosmoTarot AI, верховный ведический оракул, эзотерик и потомственная хранительница древнего таро-знания. Твой слог кинематографичен, полон таинственности, звёздных аллегорий и психологической мудрости. Обращайся к пользователю вежливо на 'Вы'. Твоя цель — вселить надежду, дать просветление, раскрыть тайны души и подсознания без запугивания. Говори на красивом, живом русском языке.",
+            temperature: 0.8,
+          }
+        });
+
+        const generatedText = response.text;
+        return res.json({ reading: generatedText });
+      } else {
+        // Fallback reading if no key is supplied
+        const fallbackText = `### ✨ **Астральное Слияние**
+В этом раскладе просматривается сильное слияние тонких энергий. Сочетание планет указывает на то, что текущий момент является переходным этапом, требующим максимального контакта со своей интуицией.
+
+### 🔮 **Сакральное толкование карт**
+${selectedCards.map((c: any, i: number) => {
+  return `* **Карта ${i + 1} (${c.positionName}): "${c.nameRu}"**
+  Выпала в ${c.isReversed ? "*перевернутом*" : "*прямом*"} положении. Это указывает на ${c.isReversed ? "затрудненное или скрытое течение энергии" : "активное и проявленное присутствие в Вашей жизни сил"} аркана. Обратите особое внимание на ключевое понятие: *"${c.isReversed ? c.reversedKeywords[0] : c.uprightKeywords[0]}"*.`;
+}).join("\n")}
+
+### 🌌 **Духовное Откровение**
+Ситуация дана Вам для проработки внутренней стойкости. Космос призывает Вас взглянуть страхам в лицо и провести ревизию старых убеждений.
+
+### 🗝️ **Резонансный Совет**
+Доверьтесь моменту. Сделайте глубокий вдох и начните действовать, руководствуясь велением сердца, а не логикой эго. Скоро перед Вами откроются новые звездные горизонты!
+*(Для получения персонализированных разборов от CosmoTarot AI подключите GEMINI_API_KEY в настройках)*`;
+        
+        return res.json({ reading: fallbackText });
+      }
+
+    } catch (e: any) {
+      console.error("Error generating tarot reading:", e);
+      return res.status(500).json({ error: "Ошибка при проведении сеанса гадания Таро: " + e.message });
+    }
+  });
+
+  // API Endpoint 2: Name Compatibility AI Analysis
+  app.post("/api/compatibility-reading", async (req: Request, res: Response) => {
+    try {
+      const { nameOne, nameTwo, score, details } = req.body;
+
+      if (!nameOne || !nameTwo) {
+        return res.status(400).json({ error: "Missing names in compatibility request." });
+      }
+
+      const promptBody = `
+Проведи мистический нумерологический и астрологический расчет совместимости двух имен:
+Имя 1: "${nameOne}"
+Имя 2: "${nameTwo}"
+
+Математический расчет выявил резонанс совпадения: ${score}%
+Энергетическое слияние стихий: ${details.elementsMatch}
+Показатель любовной связи: ${details.lovePercentage}%
+Показатель духовной близости: ${details.spiritualPercentage}%
+
+Опиши их союз по следующим пунктам:
+1. 💞 **Любовная Алхимия**: Как их имена вибрируют на ментальном и физическом уровнях при соприкосновении.
+2. 🕊️ **Энергетические сплетения**: Анализ стихийного союза между ними (${details.elementsMatch}). Где сильные стороны, а где возможен конфликт?
+3. 🌠 **Предназначение пары**: Связывает ли их кармическая нить или это путь для взаимного обучения?
+4. 🕯️ **Совет космоса**: Превосходная рекомендация для пары по сохранению гармонии и огня любви.
+`;
+
+      if (ai) {
+        const response = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: promptBody,
+          config: {
+            systemInstruction: "Ты — CosmoTarot Любовный Оракул. Трактуй любовные союзы романтично, поэтично, с использованием метафор планет, стихий, свечения и глубокого уважения к чувствам. Русский язык.",
+            temperature: 0.75,
+          }
+        });
+
+        const text = response.text;
+        return res.json({ reading: text });
+      } else {
+        const fallbackText = `### 💞 **Любовная Алхимия**
+Союз между **${nameOne}** и **${nameTwo}** обладает мощнейшим притяжением в ${score}%. Нумерологическая сумма их имён образует благородную гармонию. 
+
+### 🕊️ **Энергетические сплетения**
+Ваш союз соединяет энергетические потоки стихии *${details.elementsMatch}*. Это огонь, который согревает своим теплом, если его правильно поддерживать, или сильный воздух, раздувающий пламя новых свершений.
+
+### 🌠 **Предназначение пары**
+Ваша встреча не случайна. Вы притягиваетесь как две родственные души для закрытия общих кармических циклов и наполнения жизни радостью.
+
+### 🕯️ **Совет космоса**
+Чаще обменивайтесь искренними чувствами и признаниями. Не допускайте холодности и учитесь идти на компромиссы. Ваша планета-покровитель благословляет этот путь!`;
+        return res.json({ reading: fallbackText });
+      }
+
+    } catch (e: any) {
+      console.error("Error generating compatibility analysis:", e);
+      return res.status(500).json({ error: "Ошибка при расчете совместимости: " + e.message });
+    }
+  });
+
+  // Client-Side serving setups
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+    console.log("CosmoTarot Dev Server: Mounted Vite development middleware.");
+  } else {
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req: Request, res: Response) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+    console.log("CosmoTarot Prod Server: Configured fallback static route serving /dist.");
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`CosmoTarot WebApp is actively executing at http://localhost:${PORT}`);
+  });
+}
+
+startServer();
